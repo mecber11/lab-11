@@ -1,0 +1,77 @@
+{
+  "name": "Phishing URL Detection Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "url",
+        "options": {}
+      },
+      "id": "start-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const features = {\n  url_length: $input.first().json.url.length,\n  has_https: $input.first().json.url.startsWith('https'),\n  num_dots: ($input.first().json.url.match(/\\./g) || []).length,\n  has_suspicious_keywords: /login|verify|account|bank/i.test($input.first().json.url)\n};\n\nreturn [{ json: { features, original_url: $input.first().json.url } }];"
+      },
+      "id": "feature-extraction",
+      "name": "Extraer Características",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const riskScore = Math.min(\n  (items[0].json.features.url_length / 100) * 0.3 +\n  (items[0].json.features.num_dots * 0.1) +\n  (items[0].json.features.has_suspicious_keywords ? 0.4 : 0.1),\n  1.0\n);\n\nconst prediction = riskScore > 0.85 ? 'PHISHING' : \n                   riskScore > 0.6 ? 'SUSPICIOUS' : 'LEGITIMATE';\n\nreturn [{\n  json: {\n    original_url: items[0].json.original_url,\n    risk_score: riskScore,\n    prediction: prediction,\n    risk_level: riskScore > 0.85 ? 'HIGH' : riskScore > 0.6 ? 'MEDIUM' : 'LOW',\n    confidence: riskScore > 0.9 || riskScore < 0.1 ? 'HIGH' : 'MEDIUM',\n    features: items[0].json.features\n  }\n}];"
+      },
+      "id": "ml-analysis",
+      "name": "Análisis ML",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "domain": "your-project.supabase.co",
+        "path": "/rest/v1/url_analysis",
+        "authentication": "predefinedCredentialType",
+        "credentials": {
+          "id": "supabase-credential",
+          "name": "Supabase"
+        }
+      },
+      "id": "save-to-supabase",
+      "name": "Guardar en Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "responseMode": "responseNode",
+        "responseData": "firstEntryJson"
+      },
+      "id": "response-node",
+      "name": "Respuesta API",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "trigger": [
+    {
+      "id": "start-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1
+    }
+  ],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {}
+}
